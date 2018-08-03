@@ -1,3 +1,7 @@
+"""Read/write files for BART"""
+# This file is slightly modified from the file:
+#    https://github.com/mrirecon/bart/blob/master/python/cfl.py
+
 # Copyright 2013-2015. The Regents of the University of California.
 # All rights reserved. Use of this source code is governed by
 # a BSD-style license which can be found in the LICENSE file.

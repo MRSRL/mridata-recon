@@ -23,13 +23,12 @@ def user_to_dict(header):
     return user_dict
 
 
-def dataset_to_cfl(dir_out, file_name, suffix="", dir_noise=None, verbose=False):
+def dataset_to_cfl(dir_out, file_name, suffix="", verbose=False):
     """Convert ISMRMRD to CFL."""
     f = ismrmrd.Dataset(file_name, create_if_needed=False)
     header = xmltodict.parse(f.read_xml_header())['ismrmrdHeader']
 
     param_dict = user_to_dict(header)
-    # is_scan_archive = param_dict['OrigFileFormat'] == "ScanArchive"
     num_kx = int(header['encoding']['encodedSpace']['matrixSize']['x'])
     num_ky = int(header['encoding']['encodingLimits']['kspace_encoding_step_1']['maximum']) + 1
     num_kz = int(header['encoding']['encodingLimits']['kspace_encoding_step_2']['maximum']) + 1
@@ -42,42 +41,10 @@ def dataset_to_cfl(dir_out, file_name, suffix="", dir_noise=None, verbose=False)
     chop_y = 1 - int(param_dict['ChopY'])
     chop_z = 1 - int(param_dict['ChopZ'])
 
-    # Get noise file if it exists
-    coil_config_uid = int(param_dict['CoilConfigUID'])
-    file_search = "NoiseStatistics-Coil%d-*.h5" % coil_config_uid
-    if dir_noise is not None:
-        file_search = dir_noise + "/" + file_search
-    file_list = glob.glob(file_search)
-    if len(file_list):
-        file_list = sorted(file_list)
-        file_noise = file_list[-1]
-        if verbose:
-            print("Loading noise from file (%s)..." % file_noise)
-        f_noise = h5py.File(file_noise, 'r')
-        cplxcfg = h5py.get_config().complex_names
-        h5py.get_config().complex_names = ('real','imag')
-        opt_mat = np.copy(f_noise['Data']['OptimalTransformation'])
-        noise = np.copy(f_noise['Data']['NoiseData'])
-        h5py.get_config().complex_names = cplxcfg
-        f_noise.close()
-
-        prewhite = np.std(np.matmul(opt_mat.T, noise), axis=1)
-        scale = np.mean(prewhite)
-        opt_mat /= scale
-        # For debugging
-        if 0:
-            print("Testing pre-whitening matrix...")
-            print(prewhite)
-            print(scale)
-    else:
-        if verbose:
-            print("No noise file found...")
-        rec_std = f.read_array('rec_std', 0)
-        rec_weight = 1.0 / (rec_std ** 2)
-        rec_weight = np.sqrt(rec_weight / np.sum(rec_weight))
-        opt_mat = np.diag(rec_weight)
-        # fn = open(os.path.join(dir_out, "NO_NOISE_STAT_FILE"), "w")
-        # fn.close()
+    rec_std = f.read_array('rec_std', 0)
+    rec_weight = 1.0 / (rec_std ** 2)
+    rec_weight = np.sqrt(rec_weight / np.sum(rec_weight))
+    opt_mat = np.diag(rec_weight)
 
     if verbose:
         print("Data dims: (%d, %d, %d, %d, %d, %d, %d)" % (num_kx, num_ky, num_kz,
@@ -171,11 +138,8 @@ if __name__ == "__main__":
                         help="output directory (default: ./)")
     parser.add_argument("-s", "--suffix", default="",
                         help="suffix to file output")
-    parser.add_argument("-n", "--noise", default=None,
-                        help="directory for noise files (default:None)")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="verbose printing (default: False)")
     args = parser.parse_args()
 
-    dataset_to_cfl(args.output, args.input, suffix=args.suffix,
-                   dir_noise=args.noise, verbose=args.verbose)
+    dataset_to_cfl(args.output, args.input, suffix=args.suffix, verbose=args.verbose)
