@@ -1,0 +1,5 @@
+ismrmrd == 1.4.0
+numpy
+h5py
+xmltodict
+pyfftw
