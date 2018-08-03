@@ -76,8 +76,8 @@ def dataset_to_cfl(dir_out, file_name, suffix="", dir_noise=None, verbose=False)
         rec_weight = 1.0 / (rec_std ** 2)
         rec_weight = np.sqrt(rec_weight / np.sum(rec_weight))
         opt_mat = np.diag(rec_weight)
-        fn = open(os.path.join(dir_out, "NO_NOISE_STAT_FILE"), "w")
-        fn.close()
+        # fn = open(os.path.join(dir_out, "NO_NOISE_STAT_FILE"), "w")
+        # fn.close()
 
     if verbose:
         print("Data dims: (%d, %d, %d, %d, %d, %d, %d)" % (num_kx, num_ky, num_kz,
