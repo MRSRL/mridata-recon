@@ -1,4 +1,6 @@
 # mridata-recon
+Joseph Y. Cheng <jycheng [at] stanford.edu>
+
 Basic reconstruction scripts for data uploaded to mridata.org
 
 ## Setup
