@@ -9,41 +9,44 @@ from tqdm import tqdm
 from fileio import cfl
 from mrirecon import fse
 
-
-def user_to_dict(header):
+def header_user_param_to_dict(header):
     """Convert user parameters to dict."""
     user_dict = {}
-    user_long = header['userParameters']['userParameterLong']
-    user_double = header['userParameters']['userParameterDouble']
-    user_string = header['userParameters']['userParameterString']
+    user_long = list(header.userParameters.userParameterLong)
+    user_double = list(header.userParameters.userParameterDouble)
+    user_string = list(header.userParameters.userParameterString)
+    user_base64 = list(header.userParameters.userParameterBase64)
 
-    for entry in user_long + user_double + user_string:
-        user_dict[entry['name']] = entry['value']
+    for entry in user_long + user_double + user_string + user_base64:
+        user_dict[entry.name] = entry.value_
 
     return user_dict
 
+def dataset_to_np(file_name, verbose=False):
+    """Convert ISMRMRD to numpy array."""
+    dataset = ismrmrd.Dataset(file_name, create_if_needed=False)
+    header = ismrmrd.xsd.CreateFromDocument(dataset.read_xml_header())
+    param_dict = header_user_param_to_dict(header)
 
-def dataset_to_cfl(dir_out, file_name, suffix="", verbose=False):
-    """Convert ISMRMRD to CFL."""
-    f = ismrmrd.Dataset(file_name, create_if_needed=False)
-    header = xmltodict.parse(f.read_xml_header())['ismrmrdHeader']
-
-    param_dict = user_to_dict(header)
-    num_kx = int(header['encoding']['encodedSpace']['matrixSize']['x'])
-    num_ky = int(header['encoding']['encodingLimits']['kspace_encoding_step_1']['maximum']) + 1
-    num_kz = int(header['encoding']['encodingLimits']['kspace_encoding_step_2']['maximum']) + 1
-    num_channels = int(header['acquisitionSystemInformation']['receiverChannels'])
-    num_slices = int(header['encoding']['encodingLimits']['slice']['maximum']) + 1
-    num_echoes = int(header['encoding']['encodingLimits']['contrast']['maximum']) + 1
-    num_phases = int(header['encoding']['encodingLimits']['phase']['maximum']) + 1
-    num_segments = int(header['encoding']['encodingLimits']['segment']['maximum']) + 1
+    num_kx = header.encoding[0].encodedSpace.matrixSize.x
+    num_ky = header.encoding[0].encodingLimits.kspace_encoding_step_1.maximum + 1
+    num_kz = header.encoding[0].encodingLimits.kspace_encoding_step_2.maximum + 1
+    num_channels = header.acquisitionSystemInformation.receiverChannels
+    num_slices = header.encoding[0].encodingLimits.slice.maximum + 1
+    num_echoes = header.encoding[0].encodingLimits.contrast.maximum + 1
+    num_phases = header.encoding[0].encodingLimits.phase.maximum + 1
+    num_segments = header.encoding[0].encodingLimits.segment.maximum + 1
     is_fse_with_calib = num_segments > 1
-    chop_y = 1 - int(param_dict['ChopY'])
-    chop_z = 1 - int(param_dict['ChopZ'])
 
-    rec_std = f.read_array('rec_std', 0)
-    rec_weight = 1.0 / (rec_std ** 2)
-    rec_weight = np.sqrt(rec_weight / np.sum(rec_weight))
+    chop_y = 1 - int(param_dict.get('ChopY', 1))
+    chop_z = 1 - int(param_dict.get('ChopZ', 1))
+
+    try:
+        rec_std = dataset.read_array('rec_std', 0)
+        rec_weight = 1.0 / (rec_std ** 2)
+        rec_weight = np.sqrt(rec_weight / np.sum(rec_weight))
+    except Exception:
+        rec_weight = np.ones(num_channels)
     opt_mat = np.diag(rec_weight)
 
     if verbose:
@@ -67,12 +70,12 @@ def dataset_to_cfl(dir_out, file_name, suffix="", verbose=False):
         print("Loading data...")
         wrap = tqdm
     try:
-        num_acq = f.number_of_acquisitions()
+        num_acq = dataset.number_of_acquisitions()
     except:
         print("Unable to determine number of acquisitions! Empty?")
         return
     for i in wrap(range(num_acq)):
-        acq = f.read_acquisition(i)
+        acq = dataset.read_acquisition(i)
         i_ky = acq.idx.kspace_encode_step_1 # pylint: disable=E1101
         i_kz = acq.idx.kspace_encode_step_2 # pylint: disable=E1101
         i_echo = acq.idx.contrast           # pylint: disable=E1101
@@ -83,14 +86,15 @@ def dataset_to_cfl(dir_out, file_name, suffix="", verbose=False):
         sign = (-1) ** (i_ky * chop_y + i_kz * chop_z)
         data = np.matmul(opt_mat.T, acq.data) * sign
         if i_kz < num_kz:
+            i_segment = acq.idx.segment # pylint: disable=E1101
             if i_ky < num_ky:
                 kspace[i_phase, i_echo, i_slice, :, i_kz, i_ky, :] = data
                 if is_fse_with_calib:
-                    echo_train[i_phase, i_echo, i_slice, 0, i_kz, i_ky, 0] = acq.idx.segment
+                    echo_train[i_phase, i_echo, i_slice, 0, i_kz, i_ky, 0] = i_segment
             elif is_fse_with_calib:
                 kspace_fse_cal[i_phase, i_echo, i_slice, :, i_ky - num_ky, :] = data
-                echo_train_fse_cal[i_phase, i_echo, i_slice, 0, i_ky - num_ky, 0] = acq.idx.segment
-    f.close()
+                echo_train_fse_cal[i_phase, i_echo, i_slice, 0, i_ky - num_ky, 0] = i_segment
+    dataset.close()
 
     max_slice += 1
     if num_slices != max_slice:
@@ -114,8 +118,17 @@ def dataset_to_cfl(dir_out, file_name, suffix="", verbose=False):
         kspace_cor = fse.phase_correction(kspace, echo_train, kspace_fse_cal, echo_train_fse_cal)
         # for debugging
         if 0:
-            cfl.write(os.path.join(dir_out, "kspace_orig" + suffix), kspace)
+            cfl.write("kspace_orig" , kspace)
         kspace = kspace_cor
+
+    return kspace
+
+
+def dataset_to_cfl(dir_out, file_name, suffix="", verbose=False):
+    """Convert ISMRMRD to CFL."""
+    kspace = dataset_to_np(file_name, verbose=verbose)
+    num_phases = kspace.shape[0]
+    num_echoes = kspace.shape[1]
 
     if verbose:
         print("Writing files...")
