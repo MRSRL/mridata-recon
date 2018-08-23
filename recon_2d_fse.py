@@ -237,8 +237,10 @@ def dataset_to_cfl(dir_out, file_name, suffix="", file_png=None, verbose=False):
                       image[i_phase, i_echo, :, :, :, :, :])
 
     if file_png is not None:
+        if os.path.splitext(file_png)[1] != ".png":
+            file_png += ".png"
         if verbose:
-            print("Writing example png...")
+            print("Writing example png ({})...".format(file_png))
         energy = np.sum(np.abs(kspace) ** 2, axis=(-1, -2, -4))
         i_phase, i_echo, i_slice, i_z = np.where(energy == energy.max())
         image_out = image[i_phase[0], i_echo[0], i_slice[0], :, i_z[0], :, :]
@@ -254,7 +256,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", default="./",
                         help="output directory (default: ./)")
     parser.add_argument("-p", "--png", default=None,
-                        help="write png file (default: None)")
+                        help="png file name (default: None)")
     parser.add_argument("-s", "--suffix", default="",
                         help="suffix to file output")
     parser.add_argument("-v", "--verbose", action="store_true",
