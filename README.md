@@ -10,7 +10,7 @@ pip install -r requirements
 ```
 
 ## Datasets
-* [**Stanford 2D FSE**](http://mridata.org/list?project=Stanford%20Fullysampled%203D%20FSE%20Knees): `recon_fse_2d.py` (also supports [**NYU machine learning data**](http://mridata.org/list?project=NYU%20machine%20learning%20data))
+* [**Stanford 2D FSE**](http://mridata.org/list?project=Stanford%202D%20FSE): `recon_fse_2d.py` (also supports [**NYU machine learning data**](http://mridata.org/list?project=NYU%20machine%20learning%20data))
 
 ## Example
 To create `cfl` and `hdr` files that are support by [BART](https://mrirecon.github.io/bart/), run the following command for the downloaded dataset `data.h5`:
